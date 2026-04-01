@@ -22,6 +22,7 @@ app.use('/api/items', require('./routes/itemRoutes'));
 app.use('/api/hadoop', require('./routes/hadoopRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
+app.use('/api/sales', require('./routes/saleRoutes'));
 
 // Welcome route
 app.get('/', (req, res) => {

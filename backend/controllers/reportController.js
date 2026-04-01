@@ -1,4 +1,5 @@
 const Item = require('../models/Item');
+const Sale = require('../models/Sale');
 
 // @desc    Get low stock items
 // @route   GET /api/reports/low-stock
@@ -21,7 +22,22 @@ const getLowStockItems = async (req, res) => {
 // @access  Public
 const getInventorySummary = async (req, res) => {
   try {
-    const items = await Item.find();
+    const [items, salesStats] = await Promise.all([
+      Item.find(),
+      Sale.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalSalesAmount: { $sum: '$totalAmount' },
+            totalItemsSold: {
+              $sum: {
+                $ifNull: ['$totalQuantity', '$quantity']
+              }
+            }
+          }
+        }
+      ])
+    ]);
     
     // Calculate total inventory value
     const totalValue = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -35,11 +51,15 @@ const getInventorySummary = async (req, res) => {
     // Get low stock items count
     const lowStockCount = items.filter(item => item.quantity <= item.minStockLevel).length;
     
+    const { totalSalesAmount = 0, totalItemsSold = 0 } = salesStats[0] || {};
+
     res.status(200).json({
       totalValue,
       totalItems,
       totalQuantity,
-      lowStockCount
+      lowStockCount,
+      totalSalesAmount,
+      totalItemsSold
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
