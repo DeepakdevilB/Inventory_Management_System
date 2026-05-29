@@ -11,6 +11,11 @@ const itemSchema = new mongoose.Schema({
     required: [true, 'Please add a category'],
     trim: true
   },
+  description: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   quantity: {
     type: Number,
     required: [true, 'Please add a quantity'],

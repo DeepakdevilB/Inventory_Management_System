@@ -1,5 +1,5 @@
 /**
- * Hadoop Export Script
+ *  Export Script
  * 
  * This script simulates exporting inventory data to Hadoop HDFS.
  * In a real-world scenario, you would use Hadoop's API or command-line tools.
@@ -63,7 +63,7 @@ const exportToHDFS = async () => {
     const json2csvParser = new Parser({ fields });
     const csv = json2csvParser.parse(items);
     
-    // Create HDFS simulation directory if it doesn't exist
+    // Create simulation directory if it doesn't exist
     console.log('Creating HDFS simulation directory...');
     await fs.ensureDir(HDFS_PATH);
     

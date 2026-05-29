@@ -35,9 +35,6 @@ inventory-management/
 │   ├── server.js             # Express server
 │   └── package.json          # Backend dependencies
 │
-└── hadoop_scripts/           # Hadoop integration
-    ├── hadoop-export.js      # Export script
-    └── README.md             # Hadoop integration details
 ```
 
 ## Tech Stack

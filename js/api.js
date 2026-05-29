@@ -8,7 +8,10 @@ const API_ENDPOINTS = {
   ITEMS: `${API_BASE_URL}/items`,
   HADOOP_EXPORT: `${API_BASE_URL}/hadoop/export`,
   AUTH: `${API_BASE_URL}/auth`,
-  REPORTS: `${API_BASE_URL}/reports`
+  REPORTS: `${API_BASE_URL}/reports`,
+  SALES: `${API_BASE_URL}/sales`,
+  AI_CHAT: `${API_BASE_URL}/ai/chat`,
+  AI_MAGIC_FILL: `${API_BASE_URL}/ai/magic-fill`
 };
 
 // Error handler function
@@ -194,6 +197,64 @@ const ApiService = {
       return handleErrors(response);
     } catch (error) {
       console.error('Error fetching category stock report:', error);
+      throw error;
+    }
+  },
+
+  // Record a sale
+  createSale: async (saleData) => {
+    try {
+      const response = await fetch(API_ENDPOINTS.SALES, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(saleData)
+      });
+      return handleErrors(response);
+    } catch (error) {
+      console.error('Error recording sale:', error);
+      throw error;
+    }
+  },
+
+  // Get sales history
+  getSalesHistory: async () => {
+    try {
+      const response = await fetch(API_ENDPOINTS.SALES, {
+        headers: getAuthHeaders()
+      });
+      return handleErrors(response);
+    } catch (error) {
+      console.error('Error fetching sales history:', error);
+      throw error;
+    }
+  },
+
+  // Send message to AI Assistant
+  sendChatMessage: async (message) => {
+    try {
+      const response = await fetch(API_ENDPOINTS.AI_CHAT, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ message })
+      });
+      return handleErrors(response);
+    } catch (error) {
+      console.error('Error sending message to AI:', error);
+      throw error;
+    }
+  },
+
+  // Get Magic Fill details for an item
+  getMagicFill: async (itemName) => {
+    try {
+      const response = await fetch(API_ENDPOINTS.AI_MAGIC_FILL, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ itemName })
+      });
+      return handleErrors(response);
+    } catch (error) {
+      console.error('Error generating magic fill:', error);
       throw error;
     }
   }

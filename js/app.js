@@ -9,6 +9,11 @@ const hadoopExportResult = document.getElementById('hadoopExportResult');
 const hadoopExportDetails = document.getElementById('hadoopExportDetails');
 const lowStockTable = document.getElementById('lowStockTable');
 
+// Magic Fill buttons
+const magicFillBtn = document.getElementById('magicFillBtn');
+const editMagicFillBtn = document.getElementById('editMagicFillBtn');
+const refreshDashboardBtn = document.getElementById('refreshDashboard');
+
 // Views
 const dashboardView = document.getElementById('dashboardView');
 const inventoryView = document.getElementById('inventoryView');
@@ -24,6 +29,17 @@ const totalItemsCount = document.getElementById('totalItemsCount');
 const totalInventoryValue = document.getElementById('totalInventoryValue');
 const totalQuantity = document.getElementById('totalQuantity');
 const lowStockCount = document.getElementById('lowStockCount');
+const totalSalesAmountEl = document.getElementById('totalSalesAmount');
+const totalItemsSoldEl = document.getElementById('totalItemsSold');
+
+// Sales elements
+const saleForm = document.getElementById('saleForm');
+const saleItemsContainer = document.getElementById('saleItemsContainer');
+const addSaleItemBtn = document.getElementById('addSaleItem');
+const saleCustomerInput = document.getElementById('saleCustomer');
+const saleTotalPreview = document.getElementById('saleTotalPreview');
+const salesHistoryBody = document.getElementById('salesHistoryBody');
+const refreshSalesHistoryBtn = document.getElementById('refreshSalesHistory');
 
 // Bootstrap modal instances
 let addItemModal;
@@ -31,6 +47,8 @@ let editItemModal;
 
 // Active view tracker
 let currentView = 'dashboard';
+let cachedItems = [];
+let saleItemRowCounter = 0;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
@@ -46,9 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load all data
   loadDashboardData();
   loadItems();
+  loadSalesHistory();
   
   // Set up event listeners
   setupEventListeners();
+
+  // Ensure at least one sale item row exists
+  ensureSaleItemRow();
   
   // Set active link
   dashboardLink.classList.add('active');
@@ -80,6 +102,8 @@ const updateSummaryCards = (summary) => {
   if (totalInventoryValue) totalInventoryValue.textContent = `$${summary.totalValue.toFixed(2)}`;
   if (totalQuantity) totalQuantity.textContent = summary.totalQuantity;
   if (lowStockCount) lowStockCount.textContent = summary.lowStockCount;
+  if (totalSalesAmountEl) totalSalesAmountEl.textContent = summary.totalSalesAmount ? `$${summary.totalSalesAmount.toFixed(2)}` : '$0.00';
+  if (totalItemsSoldEl) totalItemsSoldEl.textContent = summary.totalItemsSold || 0;
 };
 
 // Display low stock items in the table
@@ -141,10 +165,229 @@ const openRestockModal = async (itemId) => {
 const loadItems = async () => {
   try {
     const items = await ApiService.getItems();
+    cachedItems = items;
     displayItems(items);
+    populateSaleItemOptions();
   } catch (error) {
     showError('Failed to load items: ' + error.message);
   }
+};
+// Populate sale item dropdowns
+const populateSaleItemOptions = () => {
+  if (!saleItemsContainer) return;
+
+  const selects = saleItemsContainer.querySelectorAll('.sale-item-select');
+
+  if (!selects.length) {
+    ensureSaleItemRow();
+    return;
+  }
+
+  selects.forEach(select => {
+    const previousValue = select.value;
+    select.innerHTML = getSaleItemOptionsHtml();
+    if (previousValue) {
+      select.value = previousValue;
+    }
+  });
+
+  updateSalePreview();
+};
+
+const ensureSaleItemRow = () => {
+  if (!saleItemsContainer) return;
+  if (!saleItemsContainer.querySelector('.sale-item-row')) {
+    addSaleItemRow();
+  }
+};
+
+const getSaleItemOptionsHtml = () => {
+  if (!cachedItems.length) {
+    return '<option value="">No items available</option>';
+  }
+
+  return [
+    '<option value="">Select an item</option>',
+    ...cachedItems.map(item => `<option value="${item._id}">${item.name} - $${item.price.toFixed(2)}</option>`)
+  ].join('');
+};
+
+const addSaleItemRow = () => {
+  if (!saleItemsContainer) return null;
+
+  const row = document.createElement('div');
+  row.className = 'sale-item-row border rounded p-3 mb-3';
+  row.dataset.rowId = `sale-item-${Date.now()}-${saleItemRowCounter++}`;
+  row.innerHTML = `
+    <div class="row g-3 align-items-end">
+      <div class="col-md-6">
+        <label class="form-label">Select Item</label>
+        <select class="form-select sale-item-select">
+          ${getSaleItemOptionsHtml()}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Quantity</label>
+        <input type="number" class="form-control sale-item-quantity" min="1" placeholder="Qty">
+        <div class="form-text sale-item-stock">Available: -</div>
+      </div>
+      <div class="col-md-2 text-end">
+        <button type="button" class="btn btn-outline-danger btn-remove-sale-item" title="Remove item">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+    <div class="text-end small text-muted mt-2">
+      Line Total: <span class="sale-item-total fw-bold">$0.00</span>
+    </div>
+  `;
+
+  saleItemsContainer.appendChild(row);
+  updateSalePreview();
+  return row;
+};
+
+const removeSaleItemRow = (row) => {
+  if (!row || !saleItemsContainer) return;
+  row.remove();
+  ensureSaleItemRow();
+  updateSalePreview();
+};
+
+const resetSaleForm = () => {
+  if (saleForm) {
+    saleForm.reset();
+  }
+  if (saleItemsContainer) {
+    saleItemsContainer.innerHTML = '';
+    addSaleItemRow();
+  }
+  updateSalePreview();
+};
+
+const collectSaleItemsFromForm = () => {
+  if (!saleItemsContainer) return [];
+
+  const rows = saleItemsContainer.querySelectorAll('.sale-item-row');
+  const saleItems = [];
+
+  rows.forEach(row => {
+    const select = row.querySelector('.sale-item-select');
+    const quantityInput = row.querySelector('.sale-item-quantity');
+
+    if (!select || !quantityInput) {
+      return;
+    }
+
+    const itemId = (select.value || '').trim();
+    const quantityRaw = (quantityInput.value || '').trim();
+
+    if (!itemId && !quantityRaw) {
+      return;
+    }
+
+    const quantity = quantityRaw === '' ? NaN : Number(quantityRaw);
+
+    saleItems.push({
+      itemId,
+      quantity,
+      row
+    });
+  });
+
+  return saleItems;
+};
+
+// Update sale total preview and stock info
+const updateSalePreview = () => {
+  if (!saleItemsContainer || !saleTotalPreview) return;
+
+  let total = 0;
+  let totalQuantity = 0;
+
+  saleItemsContainer.querySelectorAll('.sale-item-row').forEach(row => {
+    const select = row.querySelector('.sale-item-select');
+    const quantityInput = row.querySelector('.sale-item-quantity');
+    const stockInfo = row.querySelector('.sale-item-stock');
+    const lineTotalEl = row.querySelector('.sale-item-total');
+
+    if (!select || !quantityInput) {
+      return;
+    }
+
+    const selectedItem = cachedItems.find(item => item._id === select.value);
+    const quantityValue = (quantityInput.value || '').trim();
+    const quantity = quantityValue === '' ? 0 : Number(quantityValue);
+
+    if (stockInfo) {
+      stockInfo.textContent = selectedItem ? `Available: ${selectedItem.quantity}` : 'Available: -';
+    }
+
+    let lineTotal = 0;
+
+    if (selectedItem && quantity > 0) {
+      lineTotal = selectedItem.price * quantity;
+      total += lineTotal;
+      totalQuantity += quantity;
+    }
+
+    if (lineTotalEl) {
+      lineTotalEl.textContent = `$${lineTotal.toFixed(2)}`;
+    }
+  });
+
+  saleTotalPreview.textContent = total > 0 ? `$${total.toFixed(2)}` : '-';
+  return { total, totalQuantity };
+};
+
+// Load sales history
+const loadSalesHistory = async () => {
+  if (!salesHistoryBody) return;
+
+  try {
+    const sales = await ApiService.getSalesHistory();
+    displaySalesHistory(sales);
+  } catch (error) {
+    showError('Failed to load sales history: ' + error.message);
+  }
+};
+
+const displaySalesHistory = (sales) => {
+  if (!salesHistoryBody) return;
+
+  if (!sales.length) {
+    salesHistoryBody.innerHTML = '<tr><td colspan="5" class="text-center">No sales recorded yet.</td></tr>';
+    return;
+  }
+
+  salesHistoryBody.innerHTML = sales.map(sale => `
+    <tr>
+      <td>${formatSaleItemsCell(sale)}</td>
+      <td>${sale.customerName || 'Walk-in Customer'}</td>
+      <td>${getSaleTotalQuantity(sale)}</td>
+      <td>$${(sale.totalAmount || 0).toFixed(2)}</td>
+      <td>${new Date(sale.saleDate).toLocaleString()}</td>
+    </tr>
+  `).join('');
+};
+
+const formatSaleItemsCell = (sale) => {
+  if (Array.isArray(sale.items) && sale.items.length) {
+    return sale.items.map(item => `
+      <div>${item.itemName} <span class="text-muted">x${item.quantity}</span></div>
+    `).join('');
+  }
+
+  const fallbackName = sale.itemName || 'N/A';
+  const fallbackQuantity = sale.quantity || 0;
+  return `<div>${fallbackName} <span class="text-muted">x${fallbackQuantity}</span></div>`;
+};
+
+const getSaleTotalQuantity = (sale) => {
+  if (typeof sale.totalQuantity === 'number' && !Number.isNaN(sale.totalQuantity)) {
+    return sale.totalQuantity;
+  }
+  return sale.quantity || 0;
 };
 
 // Display items in the table
@@ -265,6 +508,112 @@ const setupEventListeners = () => {
       switchView('reports');
     });
   }
+
+  if (saleForm) {
+    saleForm.addEventListener('submit', handleRecordSale);
+  }
+
+  if (saleItemsContainer) {
+    saleItemsContainer.addEventListener('change', handleSaleItemsInput);
+    saleItemsContainer.addEventListener('input', handleSaleItemsInput);
+    saleItemsContainer.addEventListener('click', handleSaleItemsClick);
+  }
+
+  if (addSaleItemBtn) {
+    addSaleItemBtn.addEventListener('click', () => addSaleItemRow());
+  }
+
+  if (refreshSalesHistoryBtn) {
+    refreshSalesHistoryBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      loadSalesHistory();
+    });
+  }
+
+  // Magic fill
+  if (magicFillBtn) {
+    magicFillBtn.addEventListener('click', () => handleMagicFill('add'));
+  }
+  if (editMagicFillBtn) {
+    editMagicFillBtn.addEventListener('click', () => handleMagicFill('edit'));
+  }
+
+  // Refresh Dashboard
+  if (refreshDashboardBtn) {
+    refreshDashboardBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      
+      const originalHtml = refreshDashboardBtn.innerHTML;
+      refreshDashboardBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Refreshing...';
+      refreshDashboardBtn.disabled = true;
+      
+      try {
+        await loadDashboardData();
+        // Also refresh items just to be safe
+        await loadItems();
+      } catch (error) {
+        console.error('Failed to refresh data', error);
+      } finally {
+        refreshDashboardBtn.innerHTML = originalHtml;
+        refreshDashboardBtn.disabled = false;
+      }
+    });
+  }
+};
+
+const handleMagicFill = async (mode) => {
+  const nameInputId = mode === 'add' ? 'name' : 'editName';
+  const categoryInputId = mode === 'add' ? 'category' : 'editCategory';
+  const priceInputId = mode === 'add' ? 'price' : 'editPrice';
+  const supplierInputId = mode === 'add' ? 'supplier' : 'editSupplier';
+  const descriptionInputId = mode === 'add' ? 'description' : 'editDescription';
+  const btnId = mode === 'add' ? 'magicFillBtn' : 'editMagicFillBtn';
+
+  const nameInput = document.getElementById(nameInputId);
+  const itemName = nameInput.value.trim();
+
+  if (!itemName) {
+    showError('Please enter an item name first to use Magic Fill.');
+    nameInput.focus();
+    return;
+  }
+
+  const btn = document.getElementById(btnId);
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Filling...';
+  btn.disabled = true;
+
+  try {
+    const details = await ApiService.getMagicFill(itemName);
+    
+    if (details.category) document.getElementById(categoryInputId).value = details.category;
+    if (details.price) document.getElementById(priceInputId).value = details.price;
+    if (details.supplier) document.getElementById(supplierInputId).value = details.supplier;
+    if (details.description) document.getElementById(descriptionInputId).value = details.description;
+    
+  } catch (error) {
+    showError('Magic Fill failed: ' + error.message);
+  } finally {
+    btn.innerHTML = originalHtml;
+    btn.disabled = false;
+  }
+};
+
+const handleSaleItemsInput = (event) => {
+  if (
+    event.target.classList.contains('sale-item-select') ||
+    event.target.classList.contains('sale-item-quantity')
+  ) {
+    updateSalePreview();
+  }
+};
+
+const handleSaleItemsClick = (event) => {
+  const removeButton = event.target.closest('.btn-remove-sale-item');
+  if (removeButton) {
+    const row = removeButton.closest('.sale-item-row');
+    removeSaleItemRow(row);
+  }
 };
 
 // Handle adding a new item
@@ -274,6 +623,7 @@ const handleAddItem = async (event) => {
   const newItem = {
     name: document.getElementById('name').value,
     category: document.getElementById('category').value,
+    description: document.getElementById('description').value,
     quantity: parseInt(document.getElementById('quantity').value),
     price: parseFloat(document.getElementById('price').value),
     supplier: document.getElementById('supplier').value,
@@ -303,6 +653,7 @@ const openEditModal = async (itemId) => {
     document.getElementById('editItemId').value = item._id;
     document.getElementById('editName').value = item.name;
     document.getElementById('editCategory').value = item.category;
+    document.getElementById('editDescription').value = item.description || '';
     document.getElementById('editQuantity').value = item.quantity;
     document.getElementById('editPrice').value = item.price;
     document.getElementById('editSupplier').value = item.supplier;
@@ -322,6 +673,7 @@ const handleUpdateItem = async (event) => {
   const updatedItem = {
     name: document.getElementById('editName').value,
     category: document.getElementById('editCategory').value,
+    description: document.getElementById('editDescription').value,
     quantity: parseInt(document.getElementById('editQuantity').value),
     price: parseFloat(document.getElementById('editPrice').value),
     supplier: document.getElementById('editSupplier').value,
@@ -339,6 +691,60 @@ const handleUpdateItem = async (event) => {
     showSuccess('Item updated successfully!');
   } catch (error) {
     showError('Failed to update item: ' + error.message);
+  }
+};
+
+// Handle recording a sale
+const handleRecordSale = async (event) => {
+  event.preventDefault();
+
+  if (!saleItemsContainer) return;
+
+  const saleItemEntries = collectSaleItemsFromForm();
+
+  if (!saleItemEntries.length) {
+    showError('Please add at least one item to the sale.');
+    return;
+  }
+
+  const validEntries = saleItemEntries.filter(
+    (entry) => entry.itemId && !Number.isNaN(entry.quantity) && entry.quantity > 0
+  );
+
+  const invalidEntries = saleItemEntries.filter(
+    (entry) => !entry.itemId || Number.isNaN(entry.quantity) || entry.quantity <= 0
+  );
+
+  if (!validEntries.length) {
+    showError('Please select at least one item and enter a quantity greater than zero.');
+    invalidEntries.forEach(entry => {
+      entry.row?.classList.add('border-danger');
+      setTimeout(() => entry.row?.classList.remove('border-danger'), 1500);
+    });
+    return;
+  }
+
+  if (invalidEntries.length) {
+    invalidEntries.forEach(entry => removeSaleItemRow(entry.row));
+  }
+
+  const saleData = {
+    customerName: saleCustomerInput?.value || undefined,
+    items: validEntries.map(entry => ({
+      itemId: entry.itemId,
+      quantity: entry.quantity
+    }))
+  };
+
+  try {
+    await ApiService.createSale(saleData);
+    resetSaleForm();
+    loadItems();
+    loadDashboardData();
+    loadSalesHistory();
+    showSuccess('Sale recorded successfully!');
+  } catch (error) {
+    showError('Failed to record sale: ' + error.message);
   }
 };
 
