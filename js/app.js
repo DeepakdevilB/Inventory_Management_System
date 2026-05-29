@@ -8,6 +8,7 @@ const exportToHadoopBtn = document.getElementById('exportToHadoop');
 const hadoopExportResult = document.getElementById('hadoopExportResult');
 const hadoopExportDetails = document.getElementById('hadoopExportDetails');
 const lowStockTable = document.getElementById('lowStockTable');
+const predictiveStockTable = document.getElementById('predictiveStockTable');
 
 // Magic Fill buttons
 const magicFillBtn = document.getElementById('magicFillBtn');
@@ -87,6 +88,10 @@ const loadDashboardData = async () => {
     const lowStockItems = await ApiService.getLowStockItems();
     displayLowStockItems(lowStockItems);
     
+    // Load predictive alerts
+    const predictiveAlerts = await ApiService.getPredictiveRestockAlerts();
+    displayPredictiveAlerts(predictiveAlerts);
+    
     // Update charts
     if (window.ChartManager) {
       window.ChartManager.updateAll();
@@ -132,6 +137,39 @@ const displayLowStockItems = (items) => {
   
   // Add event listeners to restock buttons
   document.querySelectorAll('.btn-restock').forEach(button => {
+    button.addEventListener('click', () => openRestockModal(button.getAttribute('data-id')));
+  });
+};
+
+// Display predictive stock alerts in the table
+const displayPredictiveAlerts = (alerts) => {
+  if (!predictiveStockTable) return;
+  
+  if (!alerts || alerts.length === 0) {
+    predictiveStockTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No immediate restock predictions</td></tr>';
+    return;
+  }
+  
+  predictiveStockTable.innerHTML = alerts.map(alert => `
+    <tr>
+      <td class="fw-bold">${alert.item.name}</td>
+      <td>${alert.item.quantity}</td>
+      <td>${alert.dailyBurnRate.toFixed(2)} / day</td>
+      <td>
+        <span class="badge ${alert.daysRemaining <= 3 ? 'bg-danger' : alert.daysRemaining <= 7 ? 'bg-warning text-dark' : 'bg-info'}">
+          ${alert.daysRemaining} Days
+        </span>
+      </td>
+      <td>
+        <button class="btn btn-sm btn-outline-info btn-restock" data-id="${alert.item._id}">
+          <i class="bi bi-cart-plus"></i> Restock
+        </button>
+      </td>
+    </tr>
+  `).join('');
+  
+  // Re-bind restock buttons for this table too
+  predictiveStockTable.querySelectorAll('.btn-restock').forEach(button => {
     button.addEventListener('click', () => openRestockModal(button.getAttribute('data-id')));
   });
 };

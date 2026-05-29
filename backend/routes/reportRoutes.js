@@ -5,7 +5,8 @@ const {
   getInventorySummary,
   getQuantityExtremes,
   getSupplierStockReport,
-  getCategoryStockReport
+  getCategoryStockReport,
+  getPredictiveRestockAlerts
 } = require('../controllers/reportController');
 
 // Get low stock items
@@ -23,4 +24,7 @@ router.get('/supplier-stock', getSupplierStockReport);
 // Get category-wise stock report
 router.get('/category-stock', getCategoryStockReport);
 
-module.exports = router; 
+// Get predictive restock alerts
+router.get('/predictive-restock', getPredictiveRestockAlerts);
+
+module.exports = router;

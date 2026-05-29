@@ -11,7 +11,8 @@ const API_ENDPOINTS = {
   REPORTS: `${API_BASE_URL}/reports`,
   SALES: `${API_BASE_URL}/sales`,
   AI_CHAT: `${API_BASE_URL}/ai/chat`,
-  AI_MAGIC_FILL: `${API_BASE_URL}/ai/magic-fill`
+  AI_MAGIC_FILL: `${API_BASE_URL}/ai/magic-fill`,
+  PREDICTIVE_RESTOCK: `${API_BASE_URL}/reports/predictive-restock`
 };
 
 // Error handler function
@@ -255,6 +256,19 @@ const ApiService = {
       return handleErrors(response);
     } catch (error) {
       console.error('Error generating magic fill:', error);
+      throw error;
+    }
+  },
+
+  // Get predictive restock alerts
+  getPredictiveRestockAlerts: async () => {
+    try {
+      const response = await fetch(API_ENDPOINTS.PREDICTIVE_RESTOCK, {
+        headers: getAuthHeaders()
+      });
+      return handleErrors(response);
+    } catch (error) {
+      console.error('Error fetching predictive restock alerts:', error);
       throw error;
     }
   }

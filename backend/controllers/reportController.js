@@ -173,10 +173,82 @@ const getCategoryStockReport = async (req, res) => {
   }
 };
 
+// @desc    Get predictive restock alerts based on burn rate
+// @route   GET /api/reports/predictive-restock
+// @access  Public
+const getPredictiveRestockAlerts = async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Get all sales from the last 30 days
+    const recentSales = await Sale.find({
+      saleDate: { $gte: thirtyDaysAgo }
+    });
+
+    // Calculate total quantity sold for each item in the last 30 days
+    const itemSalesData = {};
+
+    recentSales.forEach(sale => {
+      // Handle new multi-item structure
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach(saleItem => {
+          const itemId = saleItem.item.toString();
+          if (!itemSalesData[itemId]) {
+            itemSalesData[itemId] = 0;
+          }
+          itemSalesData[itemId] += saleItem.quantity;
+        });
+      } 
+      // Handle legacy single-item structure
+      else if (sale.item && sale.quantity) {
+        const itemId = sale.item.toString();
+        if (!itemSalesData[itemId]) {
+          itemSalesData[itemId] = 0;
+        }
+        itemSalesData[itemId] += sale.quantity;
+      }
+    });
+
+    // Get all items to cross-reference with current stock
+    const allItems = await Item.find();
+    const alerts = [];
+
+    allItems.forEach(item => {
+      const itemId = item._id.toString();
+      const totalSoldLast30Days = itemSalesData[itemId] || 0;
+      
+      // If the item hasn't sold at all, burn rate is 0
+      if (totalSoldLast30Days === 0) return;
+
+      const dailyBurnRate = totalSoldLast30Days / 30;
+      const daysRemaining = item.quantity / dailyBurnRate;
+
+      // If estimated days remaining is 14 or less, add to alerts
+      if (daysRemaining <= 14) {
+        alerts.push({
+          item: item,
+          dailyBurnRate: dailyBurnRate,
+          daysRemaining: Math.floor(daysRemaining),
+          totalSoldLast30Days: totalSoldLast30Days
+        });
+      }
+    });
+
+    // Sort by most urgent (fewest days remaining)
+    alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+    res.status(200).json(alerts);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getLowStockItems,
   getInventorySummary,
   getQuantityExtremes,
   getSupplierStockReport,
-  getCategoryStockReport
+  getCategoryStockReport,
+  getPredictiveRestockAlerts
 }; 
